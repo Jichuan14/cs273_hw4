@@ -87,9 +87,12 @@ def apply_corruption(
     if kind == "gaussian_noise":
         noise = torch.randn_like(x, generator=generator)
         x_corr = x + noise * severity
+        x_corr = torch.clamp(x_corr, 0.0, 1.0)
     elif kind == "channel_drop":
-        mask = torch.rand(x.size(0), x.size(1), 1, 1, generator=generator) < severity
-        x_corr = x * mask
+       mask = torch.rand(x.size(0), x.size(1), 1, 1, generator=generator) > severity
+       drop_idx = torch.randint(0, x.size(1), (x.size(0),), generator=generator)
+       mask[torch.arange(x.size(0)), drop_idx] = False
+       x_corr = x * mask.to(x.dtype)
     elif kind == "cutout":
         mask = torch.rand(x.size(0), 1, 1, 1, generator=generator) < severity
         x_corr = x * mask
@@ -113,6 +116,7 @@ def compare_mlp_cnn(
     You must use the same seed for determinism.
     """
     # TODO
+    set_seed(seed)
     mlp=mlp.to(device)
     cnn=cnn.to(device)
     mlp_optimizer = torch.optim.SGD(mlp.parameters(), lr=0.1, momentum=0.9)
