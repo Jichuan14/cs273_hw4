@@ -37,11 +37,28 @@ class SmallCNN(nn.Module):
     def __init__(self, width: int = 32, dropout_p: float = 0.0):
         super().__init__()
         # TODO
-        raise NotImplementedError
+        self.layers = nn.Sequential(
+            nn.Conv2d(3, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+        )
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.global_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Linear(128, 10)
+        self.dropout = nn.Dropout(dropout_p)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # TODO
-        raise NotImplementedError
+        x = self.layers(x)
+        x = self.pool(x)
+        x = self.global_pool(x)
+        x = x.view(x.size(0), -1)
+        x = self.dropout(x)
+        return self.fc(x)
 
 
 def apply_corruption(
@@ -65,7 +82,18 @@ def apply_corruption(
     x_corr : torch.Tensor, shape (B,3,32,32), values clipped to [0,1]
     """
     # TODO
-    raise NotImplementedError
+    generator = torch.Generator().manual_seed(seed)
+    x_corr = x.clone()
+    if kind == "gaussian_noise":
+        noise = torch.randn_like(x, generator=generator)
+        x_corr = x + noise * severity
+    elif kind == "channel_drop":
+        mask = torch.rand(x.size(0), x.size(1), 1, 1, generator=generator) < severity
+        x_corr = x * mask
+    elif kind == "cutout":
+        mask = torch.rand(x.size(0), 1, 1, 1, generator=generator) < severity
+        x_corr = x * mask
+    return x_corr
 
 
 def compare_mlp_cnn(
@@ -85,7 +113,20 @@ def compare_mlp_cnn(
     You must use the same seed for determinism.
     """
     # TODO
-    raise NotImplementedError
+    mlp=mlp.to(device)
+    cnn=cnn.to(device)
+    mlp_optimizer = torch.optim.SGD(mlp.parameters(), lr=0.1, momentum=0.9)
+    cnn_optimizer = torch.optim.SGD(cnn.parameters(), lr=0.1, momentum=0.9)
+    for epoch in range(epochs):
+        train_one_epoch(mlp, train_loader, mlp_optimizer, device)
+        train_one_epoch(cnn, train_loader, cnn_optimizer, device)
+    mlp_test_acc = evaluate(mlp, test_loader, device)["acc"]
+    cnn_test_acc = evaluate(cnn, test_loader, device)["acc"]
+    return {
+        "mlp_test_acc": mlp_test_acc,
+        "cnn_test_acc": cnn_test_acc,
+        "delta": cnn_test_acc - mlp_test_acc
+    }
 
 
 if __name__ == "__main__":
